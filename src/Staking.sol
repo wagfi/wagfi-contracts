@@ -10,7 +10,6 @@ contract Staking {
     uint256 public accumulatedRewardPerShare;
     uint256 public rewardBalance;
     uint256 public timeLastAllocation;
-    uint256 public timeFirstAllocation;
     uint256 public totalShares;
     uint256 public totalRewardDebt;
 
@@ -56,7 +55,7 @@ contract Staking {
         }
     }
 
-    function withdraw(uint256 _amount) external {
+    function withdrawStake(uint256 _amount) external {
         Staker storage _staker = stakers[msg.sender];
         require(_staker.stakedAmount >= _amount, "Insufficient staked balance");
         _updateRewards();
@@ -80,6 +79,10 @@ contract Staking {
         return (accumulatedRewardPerShare + (block.timestamp - timeLastAllocation) * rewardRate * 1e18 / totalShares);
     }
 
+    function getStaker(address _staker) public view returns(Staker memory) {
+        return stakers[_staker];
+    }
+
     function _contributeStakingRewards() internal {
         _updateRewards();
         rewardBalance = address(this).balance;
@@ -91,7 +94,6 @@ contract Staking {
         }
         if(totalShares == 0) {
             timeLastAllocation = block.timestamp;
-            timeFirstAllocation = block.timestamp;
             return;
         }
         uint256 _newAccumulatedRewardPerShare = accumulatedRewardPerShare + (block.timestamp - timeLastAllocation) * rewardRate * 1e18 / totalShares;
