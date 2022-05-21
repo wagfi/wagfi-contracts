@@ -2,7 +2,13 @@
 pragma solidity 0.8.10;
 
 interface Oracle {
-    function rng() external view returns (bytes32);
+    function getCurrentValue(bytes32) external view returns (bytes);
+}
+
+interface Token {
+    function balanceOf(address) external view returns (uint256);
+
+    function mint(address, uint256) external;
 }
 
 contract DollarAuction {
@@ -12,14 +18,16 @@ contract DollarAuction {
     uint256 public maxBid;
     uint256 public winnerPayoutPercent;
     uint256 public stakingRewardsPercent;
+    uint256 public stakingRewards;
     address public admin;
     uint256 public adminFee;
-    address public token;
+    Token public token;
     address public staking;
     address public oracle;
     address[5] public bidders;
     uint256 public adminFees;
     mapping(address => uint256) public bidderBalances;
+    bytes32 public rngQueryId;
 
     constructor(
         uint256 _minBid,
@@ -47,13 +55,23 @@ contract DollarAuction {
         stakingRewardsPercent = _stakingRewardsPercent;
         admin = _admin;
         adminFee = _adminFee;
-        token = _token;
+        // token = _token;
         staking = _staking;
         oracle = _oracle;
+        // TellorRNG query Id generated using timestamp one hour following round end
+        rngQueryId = keccak256(
+            abi.encode(
+                ["string", "bytes"],
+                ["TellorRNG", abi.encode(["uint256"], [roundEnd + 60 * 60])]
+            )
+        );
     }
 
     function bid() external payable {
-        require(msg.value > bidderBalances[bidders[4]]);
+        require(
+            msg.value > bidderBalances[bidders[4]],
+            "Bid amount must be greater than the previous bid"
+        );
         address lowestBidder = bidders[0];
         for (uint256 i = 0; i < bidders.length; i++) {
             bidders[i] = bidders[i + 1];
@@ -61,7 +79,7 @@ contract DollarAuction {
         bidders[4] = msg.sender;
         adminFees += msg.value * (adminFee / 100);
         // Give one WAG to the bidder
-        // token.transfer(msg.sender, 1e18);
+        token.mint(msg.sender, 1e18);
         // Pay back bidder no longer in top 5
         (bool sent, ) = lowestBidder.call{value: bidderBalances[lowestBidder]}(
             ""
@@ -70,8 +88,8 @@ contract DollarAuction {
     }
 
     function roundOver() external {
-        require(block.timestamp > roundEnd);
-        bytes32 randomVal = Oracle(oracle).rng();
+        require(block.timestamp > roundEnd, "Round not over");
+        bytes32 randomVal = Oracle(oracle).getCurrentValue(rngQueryId);
         uint256 randIdx = uint256(randomVal) % 3;
         // Add up random sacrificial bidder and 2nd highest bidder balances
         uint256 sacrificalBidsTotal = bidderBalances[bidders[randIdx]] +
