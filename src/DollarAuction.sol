@@ -21,7 +21,7 @@ contract DollarAuction {
     uint256 public stakingRewards;
     address public admin;
     uint256 public adminFee;
-    Token public token;
+    address public token;
     address public staking;
     address public oracle;
     address[5] public bidders;
@@ -55,7 +55,7 @@ contract DollarAuction {
         stakingRewardsPercent = _stakingRewardsPercent;
         admin = _admin;
         adminFee = _adminFee;
-        // token = _token;
+        token = _token;
         staking = _staking;
         oracle = _oracle;
         // TellorRNG query Id generated using timestamp one hour following round end
@@ -74,7 +74,7 @@ contract DollarAuction {
         bidders[4] = msg.sender;
         adminFees += msg.value * (adminFee / 100);
         // Give one WAG to the bidder
-        token.mint(msg.sender, 1e18);
+        Token(token).mint(msg.sender, 1e18);
         // Pay back bidder no longer in top 5
         (bool sent, ) = lowestBidder.call{value: bidderBalances[lowestBidder]}(
             ""
