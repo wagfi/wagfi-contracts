@@ -59,12 +59,7 @@ contract DollarAuction {
         staking = _staking;
         oracle = _oracle;
         // TellorRNG query Id generated using timestamp one hour following round end
-        rngQueryId = keccak256(
-            abi.encode(
-                ["string", "bytes"],
-                ["TellorRNG", abi.encode(["uint256"], [roundEnd + 60 * 60])]
-            )
-        );
+        rngQueryId = keccak256(abi.encode("TellorRNG", roundEnd + 60 * 60));
     }
 
     function bid() external payable {
