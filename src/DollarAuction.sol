@@ -83,8 +83,15 @@ contract DollarAuction {
     }
 
     function roundOver() external {
-        require(block.timestamp > roundEnd, "Round not over");
+        require(
+            block.timestamp > roundEnd + 60 * 60 * 1.5,
+            "Wait 1.5 hours after round over"
+        );
         bytes memory randomVal = Oracle(oracle).getCurrentValue(rngQueryId);
+        require(
+            keccak256(randomVal) != keccak256(bytes("")),
+            "Failed to retrieve random value"
+        );
         uint256 randIdx = uint256(abi.decode(randomVal, (bytes32))) % 3;
         // Add up random sacrificial bidder and 2nd highest bidder balances
         uint256 sacrificalBidsTotal = bidderBalances[bidders[randIdx]] +
