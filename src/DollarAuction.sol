@@ -2,7 +2,7 @@
 pragma solidity 0.8.10;
 
 interface Oracle {
-    function getCurrentValue(bytes32) external view returns (bytes32);
+    function getCurrentValue(bytes32) external view returns (bytes memory);
 }
 
 interface Token {
@@ -84,8 +84,8 @@ contract DollarAuction {
 
     function roundOver() external {
         require(block.timestamp > roundEnd, "Round not over");
-        bytes32 randomVal = Oracle(oracle).getCurrentValue(rngQueryId);
-        uint256 randIdx = uint256(randomVal) % 3;
+        bytes memory randomVal = Oracle(oracle).getCurrentValue(rngQueryId);
+        uint256 randIdx = uint256(abi.decode(randomVal, (bytes32))) % 3;
         // Add up random sacrificial bidder and 2nd highest bidder balances
         uint256 sacrificalBidsTotal = bidderBalances[bidders[randIdx]] +
             bidderBalances[bidders[3]];
