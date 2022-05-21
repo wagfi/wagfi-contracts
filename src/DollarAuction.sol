@@ -2,7 +2,7 @@
 pragma solidity 0.8.10;
 
 interface Oracle {
-    function getCurrentValue(bytes32) external view returns (bytes);
+    function getCurrentValue(bytes32) external view returns (bytes32);
 }
 
 interface Token {
