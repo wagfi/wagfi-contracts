@@ -5,14 +5,13 @@ import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 contract Staking {
     IERC20 public wagToken;
-    IERC20 public rewardToken;
     address public governance;
     uint256 public rewardRate;
     uint256 public accumulatedRewardPerShare;
+    uint256 public rewardBalance;
     uint256 public timeLastAllocation;
-    uint256 public timeFirstAllocation;
     uint256 public totalShares;
-    uint256 public totalDebt;
+    uint256 public totalRewardDebt;
 
     mapping(address => Staker) public stakers;
 
@@ -21,63 +20,55 @@ contract Staking {
         uint256 rewardDebt;
     }
 
-    constructor(address _wagToken, address _rewardToken, uint256 _rewardRate, address _governance) {
+    constructor(address _wagToken, uint256 _rewardRate, address _governance) {
         wagToken = IERC20(_wagToken);
-        rewardToken = IERC20(_rewardToken);
         governance = _governance;
         rewardRate = _rewardRate;
     }
 
+    function changeGovernanceAddress(address _newGovernance) external {
+        require(msg.sender == governance, "Only governance can change the governance address");
+        governance = _newGovernance;
+    }
+
+    function changeRewardRate(uint256 _newRewardRate) external {
+        require(msg.sender == governance, "Only governance can change the reward rate");
+        _updateRewards();
+        rewardRate = _newRewardRate;
+    }
+
     function depositStake(uint256 _amount) public {
         require(wagToken.transferFrom(msg.sender, address(this), _amount));
-        updateRewards();
+        _updateRewards();
         Staker storage _staker = stakers[msg.sender];
+        uint256 _pendingReward;
         if(_staker.stakedAmount > 0) {
-            uint256 _pendingReward = _staker.stakedAmount * accumulatedRewardPerShare / 1e18 - _staker.rewardDebt;
-            rewardToken.transfer(msg.sender, _pendingReward);
+            _pendingReward = _staker.stakedAmount * accumulatedRewardPerShare / 1e18 - _staker.rewardDebt;
         }
         _staker.stakedAmount += _amount;
-        totalDebt -= _staker.rewardDebt;
+        totalRewardDebt -= _staker.rewardDebt;
         _staker.rewardDebt = _staker.stakedAmount * accumulatedRewardPerShare / 1e18;
-        totalDebt += _staker.rewardDebt;
+        totalRewardDebt += _staker.rewardDebt;
         totalShares += _amount;
+        if(_pendingReward > 0) {
+            msg.sender.call{value: _pendingReward}("");
+        }
     }
 
-    function updateRewards() public {
-        if(totalShares == 0) {
-            timeLastAllocation = block.timestamp;
-            timeFirstAllocation = block.timestamp;
-            return;
-        }
-        if(timeLastAllocation == block.timestamp) {
-            return;
-        }
-        accumulatedRewardPerShare += (block.timestamp - timeLastAllocation) * rewardRate * 1e18 / totalShares;
-        timeLastAllocation = block.timestamp;
-    }
-
-    function withdraw(uint256 _amount) external {
+    function withdrawStake(uint256 _amount) external {
         Staker storage _staker = stakers[msg.sender];
         require(_staker.stakedAmount >= _amount, "Insufficient staked balance");
-        updateRewards();
+        _updateRewards();
         uint256 _pendingReward = _staker.stakedAmount * accumulatedRewardPerShare / 1e18 - _staker.rewardDebt;
-        rewardToken.transfer(msg.sender, _pendingReward);
         _staker.stakedAmount -= _amount;
-        totalDebt -= _staker.rewardDebt;
+        totalRewardDebt -= _staker.rewardDebt;
         _staker.rewardDebt = _staker.stakedAmount * accumulatedRewardPerShare / 1e18;
-        totalDebt += _staker.rewardDebt;
+        totalRewardDebt += _staker.rewardDebt;
         wagToken.transfer(msg.sender, _amount);
         totalShares -= _amount;
-    }
-
-    function changeRewardRate(uint256 _rewardRate) external {
-        require(msg.sender == governance, "Only governance can change the reward rate");
-        updateRewards();
-        rewardRate = _rewardRate;
-    }
-
-    function getRemainingBalance() public view returns(int256) {
-        return (int(rewardToken.balanceOf(address(this)) + totalDebt) - int(getNewAccumulatedRewardPerShare() * totalShares / 1e18));
+        if (_pendingReward > 0) {
+            msg.sender.call{value: _pendingReward}("");
+        }
     }
 
     function getPendingRewardsByStaker(address _staker) public view returns(uint256) {
@@ -86,5 +77,39 @@ contract Staking {
 
     function getNewAccumulatedRewardPerShare() public view returns(uint256) {
         return (accumulatedRewardPerShare + (block.timestamp - timeLastAllocation) * rewardRate * 1e18 / totalShares);
+    }
+
+    function getStaker(address _staker) public view returns(Staker memory) {
+        return stakers[_staker];
+    }
+
+    function _contributeStakingRewards() internal {
+        _updateRewards();
+        rewardBalance = address(this).balance;
+    }
+
+    function _updateRewards() internal {
+        if(timeLastAllocation == block.timestamp) {
+            return;
+        }
+        if(totalShares == 0) {
+            timeLastAllocation = block.timestamp;
+            return;
+        }
+        uint256 _newAccumulatedRewardPerShare = accumulatedRewardPerShare + (block.timestamp - timeLastAllocation) * rewardRate * 1e18 / totalShares;
+        uint256 _accumulatedReward = _newAccumulatedRewardPerShare * totalShares / 1e18 - totalRewardDebt;
+        if (_accumulatedReward >= rewardBalance) {
+            accumulatedRewardPerShare += (rewardBalance - (accumulatedRewardPerShare * totalShares - totalRewardDebt)) * 1e18 / totalShares;
+            rewardRate = 0; 
+        } else {
+            accumulatedRewardPerShare = _newAccumulatedRewardPerShare;
+        }
+        timeLastAllocation = block.timestamp;
+    }
+
+    fallback() external payable {
+        if(msg.value > 0) {
+            _contributeStakingRewards();
+        }
     }
 }
